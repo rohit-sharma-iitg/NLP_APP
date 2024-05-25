@@ -1,6 +1,11 @@
 from tkinter import *
 import tkinter
 from mydb import Database
+from transformers import AutoModelForSequenceClassification
+from transformers import TFAutoModelForSequenceClassification
+from transformers import AutoTokenizer, AutoConfig
+import numpy as np
+from scipy.special import softmax
 import time
 
 
@@ -51,6 +56,40 @@ class NLPApp:
     def analyze_sentiment(self):
         prompt = self.prompt_input
 
+        def preprocess(text):
+            new_text = []
+            for t in text.split(" "):
+                t = '@user' if t.startswith('@') and len(t) > 1 else t
+                t = 'http' if t.startswith('http') else t
+                new_text.append(t)
+            return " ".join(new_text)
+
+        MODEL = f"cardiffnlp/twitter-roberta-base-sentiment-latest"
+        tokenizer = AutoTokenizer.from_pretrained(MODEL)
+        config = AutoConfig.from_pretrained(MODEL)
+        model = AutoModelForSequenceClassification.from_pretrained(MODEL)
+
+        text = preprocess(self.prompt_input.get())
+
+        encoded_input = tokenizer(text, return_tensors='pt')
+        output = model(**encoded_input)
+        scores = output[0][0].detach().numpy()
+        scores = softmax(scores)
+        ranking = np.argsort(scores)
+        ranking = ranking[::-1]
+
+        # Generate sentiment analysis result
+        result_text = ""
+        for i in range(scores.shape[0]):
+            l = config.id2label[ranking[i]]
+            s = scores[ranking[i]]
+            result_text += f"{i + 1}) {l} {np.round(float(s), 4)}\n"
+
+        # Display result in a label
+        result_label = Label(self.root, text=result_text, bg='#172D13', fg='white')
+        result_label.pack(pady=(10, 10))
+
+
     def analyze_NER(self):
         prompt = self.prompt_input
 
@@ -78,6 +117,7 @@ class NLPApp:
         analyze_btn = Button(self.root, text='Analyze Sentiment', command=self.analyze_sentiment, bg='black', fg='white',
                               width=30, height=2)
         analyze_btn.pack(pady=(10, 10))
+
         go_back_btn = Button(self.root, text='Main Menu', command=self.home_gui, bg='black', fg='white',
                               width=30, height=2)
         go_back_btn.pack(pady=(10, 10))
